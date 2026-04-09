@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: shatterquiz
+    env: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    startCommand: NODE_ENV=production npm start
+    healthCheckPath: /api/health
