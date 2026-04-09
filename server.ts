@@ -266,6 +266,17 @@ async function startServer() {
       }
     });
 
+    socket.on("player:emote", (emote: string) => {
+      if (!currentRoomId) return;
+      const room = rooms.get(currentRoomId);
+      if (room) {
+        const player = room.players.get(socket.id);
+        if (player && !player.isAlive) {
+          io.to(currentRoomId).emit("player:emote", { playerId: socket.id, emote });
+        }
+      }
+    });
+
     socket.on("disconnect", () => {
       if (currentRoomId) {
         const room = rooms.get(currentRoomId);

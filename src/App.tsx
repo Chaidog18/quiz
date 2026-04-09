@@ -29,20 +29,36 @@ interface GameState {
   winner: Player | null;
 }
 
+interface EmoteEvent {
+  id: string;
+  playerId: string;
+  emote: string;
+}
+
 export default function App() {
   const [game, setGame] = useState<GameState | null>(null);
   const [playerName, setPlayerName] = useState("");
   const [roomId, setRoomId] = useState("");
   const [isJoined, setIsJoined] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [emotes, setEmotes] = useState<EmoteEvent[]>([]);
 
   useEffect(() => {
     socket.on("game:state", (state: GameState) => {
       setGame(state);
     });
 
+    socket.on("player:emote", ({ playerId, emote }: { playerId: string, emote: string }) => {
+      const id = Math.random().toString(36).substring(7);
+      setEmotes(prev => [...prev, { id, playerId, emote }]);
+      setTimeout(() => {
+        setEmotes(prev => prev.filter(e => e.id !== id));
+      }, 2000);
+    });
+
     return () => {
       socket.off("game:state");
+      socket.off("player:emote");
     };
   }, []);
 
@@ -59,10 +75,14 @@ export default function App() {
   };
 
   const handleAnswer = (answer: string) => {
-    if (game?.gameState === "ROUND" && !selectedAnswer) {
+    if (game?.gameState === "ROUND" && !selectedAnswer && currentPlayer?.isAlive) {
       setSelectedAnswer(answer);
       socket.emit("player:answer", answer);
     }
+  };
+
+  const handleEmote = (emote: string) => {
+    socket.emit("player:emote", emote);
   };
 
   // Reset selected answer when moving to a new round
@@ -252,7 +272,7 @@ export default function App() {
                     <button
                       key={option}
                       onClick={() => handleAnswer(option)}
-                      disabled={isEvaluation || selectedAnswer !== null}
+                      disabled={isEvaluation || selectedAnswer !== null || !currentPlayer?.isAlive}
                       className={buttonClass}
                     >
                       <div className="flex items-center justify-between relative z-10">
@@ -267,6 +287,28 @@ export default function App() {
                   );
                 })}
               </div>
+
+              {/* Emote Bar for Spectators */}
+              {currentPlayer && !currentPlayer.isAlive && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-8 p-6 bg-neutral-900/50 border border-neutral-800 rounded-2xl text-center"
+                >
+                  <h3 className="text-neutral-400 font-bold mb-4 uppercase tracking-widest text-sm">Spectator Mode</h3>
+                  <div className="flex justify-center gap-4">
+                    {['💀', '👻', '😭', '🍿', '👏', '🔥'].map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => handleEmote(emoji)}
+                        className="text-3xl hover:scale-125 transition-transform"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
             </div>
 
             {/* Players Grid Section */}
@@ -290,6 +332,7 @@ export default function App() {
                         isCurrent={p.id === socket.id}
                         isEvaluation={game.gameState === "EVALUATION"}
                         correctAnswer={game.currentQuestion?.correctAnswer}
+                        activeEmotes={emotes.filter(e => e.playerId === p.id)}
                       />
                     ))}
                   </AnimatePresence>
@@ -341,11 +384,12 @@ export default function App() {
   );
 }
 
-function PlayerTile({ player, isCurrent, isEvaluation, correctAnswer }: { 
+function PlayerTile({ player, isCurrent, isEvaluation, correctAnswer, activeEmotes }: { 
   player: Player; 
   isCurrent: boolean;
   isEvaluation: boolean;
   correctAnswer?: string;
+  activeEmotes: EmoteEvent[];
   key?: React.Key;
 }) {
   const isWrong = isEvaluation && player.lastAnswer !== correctAnswer;
@@ -368,6 +412,21 @@ function PlayerTile({ player, isCurrent, isEvaluation, correctAnswer }: {
           : "bg-neutral-900 border-neutral-800 grayscale"
       }`}
     >
+      <AnimatePresence>
+        {activeEmotes.map(e => (
+          <motion.div
+            key={e.id}
+            initial={{ opacity: 0, y: 0, scale: 0.5 }}
+            animate={{ opacity: 1, y: -40, scale: 1.5 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.5, ease: "easeOut" }}
+            className="absolute z-50 pointer-events-none text-3xl drop-shadow-lg"
+          >
+            {e.emote}
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
       {/* Damage Cracks */}
       {player.health < 3 && player.isAlive && (
         <div className={`absolute inset-0 crack-overlay opacity-${(3 - player.health) * 30}`} />
