@@ -5,6 +5,8 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import "dotenv/config";
+import { GoogleGenAI } from "@google/genai";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,64 +31,27 @@ interface Question {
   correctAnswer: string;
 }
 
-const QUESTIONS: Question[] = [
-  {
-    id: "1",
-    category: "Science",
-    question: "What is the chemical symbol for Gold?",
-    options: ["Gd", "Au", "Ag", "Fe"],
-    correctAnswer: "Au",
-  },
-  {
-    id: "2",
-    category: "Geography",
-    question: "Which is the largest ocean on Earth?",
-    options: ["Atlantic", "Indian", "Arctic", "Pacific"],
-    correctAnswer: "Pacific",
-  },
-  {
-    id: "3",
-    category: "History",
-    question: "Who was the first President of the United States?",
-    options: ["Thomas Jefferson", "Abraham Lincoln", "George Washington", "John Adams"],
-    correctAnswer: "George Washington",
-  },
-  {
-    id: "4",
-    category: "Technology",
-    question: "What does 'URL' stand for?",
-    options: ["Universal Resource Locator", "Uniform Resource Locator", "Unified Resource Link", "Universal Radio Link"],
-    correctAnswer: "Uniform Resource Locator",
-  },
-  {
-    id: "5",
-    category: "Pop Culture",
-    question: "Which movie won the first Academy Award for Best Picture?",
-    options: ["Wings", "Sunrise", "The Jazz Singer", "Metropolis"],
-    correctAnswer: "Wings",
-  },
-  {
-    id: "6",
-    category: "Science",
-    question: "What is the hardest natural substance on Earth?",
-    options: ["Gold", "Iron", "Diamond", "Quartz"],
-    correctAnswer: "Diamond",
-  },
-  {
-    id: "7",
-    category: "Geography",
-    question: "What is the capital of Japan?",
-    options: ["Kyoto", "Osaka", "Tokyo", "Nagoya"],
-    correctAnswer: "Tokyo",
-  },
-  {
-    id: "8",
-    category: "History",
-    question: "In which year did World War II end?",
-    options: ["1943", "1944", "1945", "1946"],
-    correctAnswer: "1945",
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+async function generateQuestion(): Promise<Question | null> {
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: "Generate a multiple choice trivia question about Java or Web Programming. Return ONLY valid JSON with this structure: { \"category\": \"string\", \"question\": \"string\", \"options\": [\"string\", \"string\", \"string\", \"string\"], \"correctAnswer\": \"string\" }. Ensure the correctAnswer is exactly one of the options.",
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
+    if (response.text) {
+      const q = JSON.parse(response.text);
+      q.id = Math.random().toString(36).substring(7);
+      return q as Question;
+    }
+  } catch (e) {
+    console.error("Error generating question", e);
   }
-];
+  return null;
+}
 
 async function startServer() {
   try {
@@ -111,9 +76,9 @@ async function startServer() {
     });
 
   const rooms: Map<string, {
-    gameState: "LOBBY" | "STARTING" | "ROUND" | "EVALUATION" | "GAME_OVER";
+    gameState: "LOBBY" | "STARTING" | "GENERATING" | "ROUND" | "EVALUATION" | "GAME_OVER";
     players: Map<string, Player>;
-    currentQuestionIndex: number;
+    currentQuestion: Question | null;
     timer: number;
   }> = new Map();
 
@@ -122,7 +87,7 @@ async function startServer() {
       rooms.set(roomId, {
         gameState: "LOBBY",
         players: new Map(),
-        currentQuestionIndex: 0,
+        currentQuestion: null,
         timer: 0,
       });
     }
@@ -136,7 +101,7 @@ async function startServer() {
     io.to(roomId).emit("game:state", {
       gameState: room.gameState,
       players: Array.from(room.players.values()),
-      currentQuestion: room.gameState === "ROUND" || room.gameState === "EVALUATION" ? QUESTIONS[room.currentQuestionIndex] : null,
+      currentQuestion: room.currentQuestion,
       timer: room.timer,
       winner: room.gameState === "GAME_OVER" ? getWinner(roomId) : null,
     });
@@ -153,21 +118,37 @@ async function startServer() {
     return null;
   };
 
-  const startRound = (roomId: string) => {
+  const generateAndStartRound = async (roomId: string) => {
     const room = rooms.get(roomId);
     if (!room) return;
-    room.gameState = "ROUND";
-    room.timer = 15;
-    room.players.forEach(p => p.lastAnswer = null);
+    room.gameState = "GENERATING";
+    room.timer = 0; // Pause timer
+    broadcastState(roomId);
+
+    const q = await generateQuestion();
+    
+    const currentRoom = rooms.get(roomId);
+    if (!currentRoom || currentRoom.gameState !== "GENERATING") return;
+
+    if (q) {
+      currentRoom.currentQuestion = q;
+    } else {
+      currentRoom.currentQuestion = {
+        id: "fallback", category: "Error", question: "AI failed to generate a question. Free point!", options: ["A", "B", "C", "D"], correctAnswer: "A"
+      };
+    }
+    currentRoom.gameState = "ROUND";
+    currentRoom.timer = 15;
+    currentRoom.players.forEach(p => p.lastAnswer = null);
     broadcastState(roomId);
   };
 
   const evaluateRound = (roomId: string) => {
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || !room.currentQuestion) return;
     room.gameState = "EVALUATION";
     room.timer = 5;
-    const correct = QUESTIONS[room.currentQuestionIndex].correctAnswer;
+    const correct = room.currentQuestion.correctAnswer;
     
     room.players.forEach(p => {
       if (p.isAlive) {
@@ -190,8 +171,7 @@ async function startServer() {
     if (!room) return;
 
     if (room.gameState === "STARTING") {
-      room.currentQuestionIndex = Math.floor(Math.random() * QUESTIONS.length);
-      startRound(roomId);
+      generateAndStartRound(roomId);
     } else if (room.gameState === "ROUND") {
       evaluateRound(roomId);
     } else if (room.gameState === "EVALUATION") {
@@ -200,12 +180,7 @@ async function startServer() {
         room.gameState = "GAME_OVER";
         room.timer = 10;
       } else {
-        let nextIndex = Math.floor(Math.random() * QUESTIONS.length);
-        while (nextIndex === room.currentQuestionIndex && QUESTIONS.length > 1) {
-          nextIndex = Math.floor(Math.random() * QUESTIONS.length);
-        }
-        room.currentQuestionIndex = nextIndex;
-        startRound(roomId);
+        generateAndStartRound(roomId);
       }
     } else if (room.gameState === "GAME_OVER") {
       room.gameState = "LOBBY";

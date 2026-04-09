@@ -22,7 +22,7 @@ interface Question {
 }
 
 interface GameState {
-  gameState: "LOBBY" | "STARTING" | "ROUND" | "EVALUATION" | "GAME_OVER";
+  gameState: "LOBBY" | "STARTING" | "GENERATING" | "ROUND" | "EVALUATION" | "GAME_OVER";
   players: Player[];
   currentQuestion: Question | null;
   timer: number;
@@ -202,6 +202,19 @@ export default function App() {
               {game.timer}
             </motion.div>
             <p className="text-2xl font-bold mt-8 text-neutral-400 uppercase tracking-[0.2em]">Get Ready!</p>
+          </div>
+        )}
+
+        {game.gameState === "GENERATING" && (
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+            >
+              <ShieldAlert className="w-16 h-16 text-orange-500" />
+            </motion.div>
+            <h2 className="text-3xl font-bold mt-6">Generating Next Question...</h2>
+            <p className="text-neutral-400 mt-2">AI is thinking of a challenge...</p>
           </div>
         )}
 
