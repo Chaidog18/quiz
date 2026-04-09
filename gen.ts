@@ -27,7 +27,7 @@ const content = `export interface Question {
 }
 
 const rawQuestions = [
-${questions.join(',\\n')}
+${questions.join(',\n')}
 ];
 
 export const QUESTIONS: Question[] = rawQuestions.map((q, i) => {
