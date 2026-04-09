@@ -1,10 +1,4 @@
-export interface Question {
-  id: string;
-  category: string;
-  question: string;
-  options: string[];
-  correctAnswer: string;
-}
+import fs from 'fs';
 
 const realQuestions = [
   ["What does HTML stand for?", "Hyper Text Markup Language", "Hyperlinks and Text Markup Language", "Home Tool Markup Language", "Hyper Tool Markup Language"],
@@ -109,7 +103,17 @@ const realQuestions = [
   ["Which CSS unit is relative to the font-size of the element itself?", "em", "rem", "px", "vw"]
 ];
 
-export const QUESTIONS: Question[] = realQuestions.map((q, i) => {
+const content = \`export interface Question {
+  id: string;
+  category: string;
+  question: string;
+  options: string[];
+  correctAnswer: string;
+}
+
+const rawQuestions = \${JSON.stringify(realQuestions, null, 2)};
+
+export const QUESTIONS: Question[] = rawQuestions.map((q, i) => {
   const options = [q[1], q[2], q[3], q[4]].sort(() => Math.random() - 0.5);
   return {
     id: "q_" + i,
@@ -119,3 +123,6 @@ export const QUESTIONS: Question[] = realQuestions.map((q, i) => {
     correctAnswer: q[1]
   };
 });
+\`;
+
+fs.writeFileSync('src/questions.ts', content);
