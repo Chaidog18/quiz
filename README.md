@@ -1,41 +1,20 @@
-# ShatterQuiz
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-Realtime multiplayer quiz game built with React, Vite, Express, and Socket.IO.
+# Run and deploy your AI Studio app
 
-## Run locally
+This contains everything you need to run your app locally.
 
-Prerequisites: Node.js 20+
+View your app in AI Studio: https://ai.studio/apps/cb7b1394-2259-4864-83fa-1d7fbf79b017
 
-1. Install dependencies
+## Run Locally
 
-```bash
-npm install
-```
+**Prerequisites:**  Node.js
 
-2. Start the app
 
-```bash
-npm run dev
-```
-
-3. Open the app
-
-http://localhost:3000
-
-No API key is required for the current game flow.
-
-## Deploy (Render)
-
-This project includes a Render blueprint at `render.yaml`.
-
-1. Push this code to your GitHub repository.
-2. In Render, click New + -> Blueprint.
-3. Select your repository.
-4. Render will auto-detect `render.yaml` and deploy.
-
-The deployed app exposes a health endpoint at `/api/health`.
-
-## Manual deploy settings (if needed)
-
-- Build Command: `npm install && npm run build`
-- Start Command: `NODE_ENV=production npm start`
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
